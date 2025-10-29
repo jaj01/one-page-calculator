@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>One-Page Calculator</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="container">
+<h1>One‑Page Calculator</h1>
+
+
+<div class="calculator">
+<input id="a" type="number" placeholder="First number" />
+<input id="b" type="number" placeholder="Second number" />
+
+
+<div class="controls">
+<button data-op="add">+</button>
+<button data-op="sub">−</button>
+<button data-op="mul">×</button>
+<button data-op="div">÷</button>
+</div>
+
+
+<div id="result" class="result">Result: —</div>
+</div>
+
+
+<p class="notes">Works offline in the browser for the arithmetic — server only serves files.</p>
+</main>
+
+
+<script src="/app.js"></script>
+</body>
+</html>
