@@ -1,0 +1,104 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build-and-deploy:
+    name: Build → Push → Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ACR: joshikacr.azurecr.io
+      IMAGE_NAME: onepage-calculator
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ACR (Docker)
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.ACR }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./            # adjust if your Dockerfile is in a subfolder like ./app
+          file: ./Dockerfile     # adjust path if needed
+          push: true
+          tags: |
+            ${{ env.ACR }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.ACR }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Configure kubectl (set AKS context)
+        uses: azure/aks-set-context@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          cluster-name: ${{ secrets.AKS_NAME }}
+          resource-group: ${{ secrets.RESOURCE_GROUP }}
+
+      - name: Patch deployment image (update)
+        run: |
+          kubectl -n default set image deployment/onepage-calculator onepage-calculator=${{ env.ACR }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --record
+        # if your deployment name or container name differs, update above accordingly
+
+      - name: Wait for rollout to complete
+        run: |
+          kubectl -n default rollout status deployment/onepage-calculator --timeout=180s
+
+      - name: Get Service External IP
+        id: get_ip
+        run: |
+          echo "Waiting for LoadBalancer IP..."
+          for i in {1..30}; do
+            IP=$(kubectl -n default get svc onepage-calculator-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+            if [ -n "$IP" ]; then
+              echo "found_ip=$IP" >> $GITHUB_OUTPUT
+              echo "External IP: $IP"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "found_ip=" >> $GITHUB_OUTPUT
+          echo "No external IP assigned yet."
+
+      - name: Verify app HTTP response (if IP found)
+        if: steps.get_ip.outputs.found_ip != ''
+        run: |
+          echo "curl http://$FOUND_IP/"
+          FOUND_IP=${{ steps.get_ip.outputs.found_ip }}
+          # retry a few times until it returns 2xx
+          for i in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$FOUND_IP/ || echo "000")
+            echo "Attempt $i - HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+              echo "Application is reachable."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Application did not respond with 2xx/3xx after retries." >&2
+          exit 1
+
+      - name: Success summary
+        if: ${{ success() }}
+        run: |
+          echo "Deployment successful: ${{ env.ACR }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
