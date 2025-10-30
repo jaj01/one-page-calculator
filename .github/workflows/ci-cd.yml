@@ -41,13 +41,12 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
-          context: ./            # adjust if your Dockerfile is in a subfolder like ./app
-          file: ./Dockerfile     # adjust path if needed
+          # context: ./  <-- REMOVE THIS LINE
+          # file: ./Dockerfile     <-- REMOVE THIS LINE
           push: true
           tags: |
             ${{ env.ACR }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.ACR }}/${{ env.IMAGE_NAME }}:latest
-
       - name: Configure kubectl (set AKS context)
         uses: azure/aks-set-context@v2
         with:
