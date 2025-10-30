@@ -38,15 +38,25 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+            - name: List repo files (debug)
+        run: |
+          echo "Repo root files:"
+          ls -la
+          echo "app folder (if present):"
+          ls -la app || true
+          echo "k8s folder:"
+          ls -la k8s || true
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
-          # context: ./  <-- REMOVE THIS LINE
-          # file: ./Dockerfile     <-- REMOVE THIS LINE
+          context: .                # repo root where Dockerfile lives
+          file: ./Dockerfile        # path to Dockerfile
           push: true
           tags: |
             ${{ env.ACR }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.ACR }}/${{ env.IMAGE_NAME }}:latest
+
       - name: Configure kubectl (set AKS context)
         uses: azure/aks-set-context@v2
         with:
